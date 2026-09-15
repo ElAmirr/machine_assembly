@@ -35,6 +35,32 @@ function enrichTask(task, lookups, taskById) {
   };
 }
 
+/** Rolls up the tools/components required across a project's tasks (incl. steps) so they are visible on open. */
+function aggregateRequirements(tasks, lookups) {
+  const collect = (rowsKey, idKey, byId, totalize) => {
+    const map = new Map();
+    for (const task of tasks) {
+      const lists = [...(task[rowsKey] || []), ...(task.steps || []).flatMap((s) => s[rowsKey] || [])];
+      for (const row of lists) {
+        const id = str(row[idKey]);
+        const item = id ? byId.get(id) : null;
+        if (!item) continue;
+        const qty = Number(row.quantity) || 0;
+        const entry = map.get(id) || { id, name: item.name, unit: item.unit || '', quantity: 0, occurrences: 0 };
+        entry.quantity = totalize ? entry.quantity + qty : Math.max(entry.quantity, qty);
+        entry.occurrences += 1;
+        if (!entry.unit && row.unit) entry.unit = row.unit;
+        map.set(id, entry);
+      }
+    }
+    return [...map.values()].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  };
+  return {
+    tools: collect('tools', 'toolId', lookups.toolById, false),
+    components: collect('components', 'componentId', lookups.componentById, true)
+  };
+}
+
 /** Technicians only see projects that contain their work (spec section 3). */
 async function visibleProjectIds(req, tasks) {
   const perms = req.permissions || [];
@@ -150,6 +176,7 @@ projectsRouter.get('/projects/:id', requirePermission('projects.view'), asyncHan
   const detail = enrichProject(project, lookups, tasks);
   res.json({
     ...detail,
+    requirements: aggregateRequirements(tasks, lookups),
     tasks: sortedTasks,
     attachments: attachments.map(serializeAttachment),
     createdByName: lookups.userName(project.createdBy),
@@ -287,7 +314,6 @@ projectsRouter.post('/projects/:id/tasks', requirePermission('tasks.create'), as
     approvalRequired: !!body.approvalRequired,
     pendingTaskApproval: false,
     sequentialSteps: body.sequentialSteps !== false,
-    materials: [],
     components: [],
     tools: [],
     notes: '',

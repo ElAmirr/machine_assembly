@@ -21,7 +21,7 @@ const evKey = (t) => t?.key || t?.code || t?.name;
 const evLabel = (t) => t?.label || t?.name || t?.code;
 
 function reqItemName(row, map) {
-  const key = row.materialId || row.componentId || row.toolId;
+  const key = row.componentId || row.toolId;
   return map.get(key)?.name || '—';
 }
 
@@ -397,7 +397,7 @@ function ReviewModal({ approval, mode, onClose, onDone }) {
 
 // ------------------------------------------------------------------ step block
 
-function StepBlock({ task, step, index, refs, evidence, permissions, locked, onReload }) {
+function StepBlock({ task, step, index, refs, evidence, hints = [], permissions, locked, onReload }) {
   const { user, hasPermission } = useAuth();
   const { show, confirm } = useToast();
   const [showAdd, setShowAdd] = useState(false);
@@ -464,6 +464,7 @@ function StepBlock({ task, step, index, refs, evidence, permissions, locked, onR
               <div className="step-meta small muted">
                 {durationText(step.estimatedDuration, step.durationUnit)}
                 {evidence.length > 0 ? ` · ${evidence.length} evidence item(s)` : ''}
+                {hints.length > 0 ? ` · ${hints.length} work instruction file(s)` : ''}
                 {step.completedAt ? ` · completed ${fmtDateTime(step.completedAt)}` : ''}
                 {step.startedAt && !step.completedAt ? ` · started ${fmtRelative(step.startedAt)}` : ''}
               </div>
@@ -516,9 +517,32 @@ function StepBlock({ task, step, index, refs, evidence, permissions, locked, onR
         {step.description ? <div className="small mt-8" style={{ whiteSpace: 'pre-wrap' }}>{step.description}</div> : null}
         {step.instructions ? <div className="instruction-box">{step.instructions}</div> : null}
 
-        {(step.materials?.length || step.components?.length || step.tools?.length) ? (
+        {hints.length > 0 ? (
+          <div className="mt-8">
+            <div className="small muted flex" style={{ gap: 4, alignItems: 'center', marginBottom: 4 }}>
+              <Icon name="file" size={13} /> Work instructions (hint files)
+            </div>
+            {hints.map((f) => (
+              <div className="evidence-item" key={f.id}>
+                <div className="evidence-thumb">
+                  {isImageAtt(f) ? <AuthImage attachmentId={f.id} alt={f.filename} /> : <Icon name="file" size={18} />}
+                </div>
+                <div className="grow" style={{ minWidth: 0 }}>
+                  <div className="strong" style={{ overflowWrap: 'anywhere' }}>{f.filename}</div>
+                  <div className="small muted">{fmtBytes(f.size)} · uploaded by {f.uploadedByName || '—'}</div>
+                </div>
+                <div className="flex" style={{ flexShrink: 0 }}>
+                  <a className="icon-btn" title="Download" href={api.fileUrl(f.id, false)}>
+                    <Icon name="download" size={15} />
+                  </a>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {(step.components?.length || step.tools?.length) ? (
           <div className="mt-8" style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-            <ReqChips icon="materials" label="Materials" rows={step.materials} map={new Map(refs.materials.map((x) => [x.id, x]))} />
             <ReqChips icon="components" label="Components" rows={step.components} map={new Map(refs.components.map((x) => [x.id, x]))} />
             <ReqChips icon="tools" label="Tools" rows={step.tools} map={new Map(refs.tools.map((x) => [x.id, x]))} />
           </div>
@@ -615,12 +639,46 @@ export default function TaskPage() {
     return m;
   }, [detail]);
 
+  // Instruction files (hints) linked to the workflow template steps of this task.
+  const hintsByStep = useMemo(() => {
+    const m = new Map();
+    for (const h of detail?.hints || []) {
+      if (!m.has(h.stepId)) m.set(h.stepId, []);
+      m.get(h.stepId).push(h);
+    }
+    return m;
+  }, [detail]);
+
   if (error) return <ErrorBlock message={error} />;
   if (!detail) return <Loading />;
 
   const { task, project, refs, permissions, approvals, comments, attachments } = detail;
   const steps = [...(task.steps || [])].sort((a, b) => (a.order || 0) - (b.order || 0));
   const doneTask = ['completed', 'approved'].includes(task.status);
+
+  // Tools/components of the task + all its steps, rolled up for a quick overview.
+  const requirementRows = (rowsKey, idKey, list, totalize) => {
+    const byId = new Map((list || []).map((x) => [x.id, x]));
+    const map = new Map();
+    const push = (rows) => {
+      for (const r of rows || []) {
+        const item = byId.get(r[idKey]);
+        if (!item) continue;
+        const qty = Number(r.quantity) || 0;
+        const cur = map.get(r[idKey]) || { [idKey]: r[idKey], quantity: 0, unit: '' };
+        cur.quantity = totalize ? cur.quantity + qty : Math.max(cur.quantity, qty);
+        if (!cur.unit) cur.unit = r.unit || item.unit || '';
+        map.set(r[idKey], cur);
+      }
+    };
+    push(task[rowsKey]);
+    for (const step of steps) push(step[rowsKey]);
+    return [...map.values()];
+  };
+  const taskRequirements = {
+    components: requirementRows('components', 'componentId', refs.components, true),
+    tools: requirementRows('tools', 'toolId', refs.tools, false)
+  };
   const taskSubmitted = task.status === 'submitted';
   const canOverride = hasPermission('tasks.override');
   const canEditTask = permissions.canEdit || hasPermission('tasks.edit');
@@ -723,6 +781,7 @@ export default function TaskPage() {
                     index={i}
                     refs={refs}
                     evidence={evidenceByStep.get(step.id) || []}
+                    hints={hintsByStep.get(step.id) || []}
                     permissions={permissions}
                     locked={locked}
                     onReload={load}
@@ -768,6 +827,17 @@ export default function TaskPage() {
                 <div className="small" style={{ whiteSpace: 'pre-wrap' }}>{task.description}</div>
               </>
             ) : null}
+          </Card>
+
+          <Card title="Tools & components" className="mt-16">
+            {taskRequirements.tools.length === 0 && taskRequirements.components.length === 0 ? (
+              <div className="small muted">No tools or components required for this task.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <ReqChips icon="tools" label="Tools" rows={taskRequirements.tools} map={new Map((refs.tools || []).map((x) => [x.id, x]))} />
+                <ReqChips icon="components" label="Components" rows={taskRequirements.components} map={new Map((refs.components || []).map((x) => [x.id, x]))} />
+              </div>
+            )}
           </Card>
 
           <Card title={`Approvals (${approvals?.length || 0})`} className="mt-16">

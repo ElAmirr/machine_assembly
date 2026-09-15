@@ -35,6 +35,22 @@ export async function saveBlob(buffer, originalName) {
   };
 }
 
+/** Copy an existing blob to a new stored file (used when duplicating a workflow template). */
+export async function copyBlob(storedRel) {
+  const ext = path.extname(String(storedRel || '')).slice(0, 16).toLowerCase();
+  const month = new Date().toISOString().slice(0, 7);
+  const folderAbs = path.join(attachmentsDir(), month);
+  await fs.mkdir(folderAbs, { recursive: true });
+  const storedName = `${newId('file')}${ext}`;
+  const abs = path.join(folderAbs, storedName);
+  await fs.copyFile(blobAbsPath(storedRel), abs);
+  const stat = await fs.stat(abs);
+  return {
+    storedRel: `attachments/${month}/${storedName}`,
+    size: stat.size
+  };
+}
+
 export function blobAbsPath(storedRel) {
   const parts = String(storedRel || '').split('/').filter((p) => p && p !== '..' && p !== '.');
   return path.join(config.dataDir, ...parts);

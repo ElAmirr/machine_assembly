@@ -79,6 +79,8 @@ function normalizeStepFromTemplate(step, index) {
   return {
     id: newId('step'),
     order: index + 1,
+    // Keeps the link to the template step so its instruction files stay visible in the project.
+    sourceTemplateStepId: str(step.id) || null,
     title: str(step.title) || `Step ${index + 1}`,
     description: str(step.description),
     instructions: str(step.instructions),
@@ -86,7 +88,6 @@ function normalizeStepFromTemplate(step, index) {
     durationUnit: step.durationUnit || 'days',
     roleId: strOrNull(step.roleId),
     assignedUserId: strOrNull(step.assignedUserId),
-    materials: normalizeRequirement(step.materials, 'materialId'),
     components: normalizeRequirement(step.components, 'componentId'),
     tools: normalizeRequirement(step.tools, 'toolId'),
     evidenceRequired: step.evidenceRequired !== false,
@@ -177,7 +178,6 @@ export async function createProject(input, user) {
       approvalRequired: !!tplTask.approvalRequired,
       pendingTaskApproval: false,
       sequentialSteps: tplTask.sequentialSteps !== false,
-      materials: normalizeRequirement(tplTask.materials, 'materialId'),
       components: normalizeRequirement(tplTask.components, 'componentId'),
       tools: normalizeRequirement(tplTask.tools, 'toolId'),
       notes: '',

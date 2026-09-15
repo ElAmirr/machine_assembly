@@ -4,6 +4,7 @@ import { Router } from 'express';
 import { collections } from '../storage/db.js';
 import { requireAuth, requirePermission } from '../middleware/auth.js';
 import { logAudit } from '../core/audit.js';
+import { deleteBlob, copyBlob } from '../storage/blobStore.js';
 import { newId, nowIso, asyncHandler, badRequest, notFound, str, strOrNull, toNum, idArray } from '../utils.js';
 
 export const workflowsRouter = Router();
@@ -27,7 +28,6 @@ function normalizeSteps(steps) {
     durationUnit: s.durationUnit || 'days',
     roleId: strOrNull(s.roleId),
     assignedUserId: strOrNull(s.assignedUserId),
-    materials: normReq(s.materials, 'materialId'),
     components: normReq(s.components, 'componentId'),
     tools: normReq(s.tools, 'toolId'),
     evidenceRequired: s.evidenceRequired !== false,
@@ -65,7 +65,6 @@ function normalizeTasks(tasks) {
     approvalRequired: !!raw.approvalRequired,
     sequentialSteps: raw.sequentialSteps !== false,
     dependsOn: idArray(raw.dependsOn).filter((depId) => withIds.some((w) => w.id === depId && w.id !== id)),
-    materials: normReq(raw.materials, 'materialId'),
     components: normReq(raw.components, 'componentId'),
     tools: normReq(raw.tools, 'toolId'),
     notes: str(raw.notes),
@@ -77,6 +76,54 @@ async function validateProjectType(projectTypeId) {
   const type = await collections.projectTypes.getById(projectTypeId);
   if (!type) throw badRequest('Selected project type does not exist');
   return type;
+}
+
+// ------------------------------------------------------------ step instruction files
+
+/** All step ids of a template's task list. */
+function stepIdsOf(tasks) {
+  const ids = [];
+  for (const task of tasks || []) {
+    for (const step of task.steps || []) {
+      if (step.id) ids.push(step.id);
+    }
+  }
+  return ids;
+}
+
+/** Delete the instruction files (attachments) of the given template step ids. */
+async function removeStepHints(stepIds) {
+  if (!stepIds.length) return;
+  const rows = await collections.attachments.find((a) => a.ownerType === 'template_step' && stepIds.includes(a.ownerId));
+  for (const row of rows) {
+    await deleteBlob(row.storedRel);
+  }
+  if (rows.length) await collections.attachments.removeWhere({ ownerType: 'template_step', ownerId: stepIds });
+}
+
+/** Copy instruction files when a template is duplicated (old step id -> new step id, same index). */
+async function copyStepHints(oldTasks, newTasks) {
+  for (let ti = 0; ti < (oldTasks || []).length; ti += 1) {
+    const oldSteps = oldTasks[ti].steps || [];
+    const newSteps = newTasks[ti]?.steps || [];
+    for (let si = 0; si < oldSteps.length; si += 1) {
+      const oldStepId = oldSteps[si].id;
+      const newStepId = newSteps[si]?.id;
+      if (!oldStepId || !newStepId) continue;
+      const rows = await collections.attachments.find({ ownerType: 'template_step', ownerId: oldStepId });
+      for (const row of rows) {
+        const copied = await copyBlob(row.storedRel);
+        await collections.attachments.insert({
+          ...row,
+          id: newId('att'),
+          ownerId: newStepId,
+          storedRel: copied.storedRel,
+          size: copied.size,
+          uploadedAt: nowIso()
+        });
+      }
+    }
+  }
 }
 
 workflowsRouter.get('/workflow-templates', requirePermission('workflow.view'), asyncHandler(async (req, res) => {
@@ -138,6 +185,12 @@ workflowsRouter.put('/workflow-templates/:id', requirePermission('workflow.manag
   if (body.active !== undefined) patch.active = !!body.active;
   if (body.tasks !== undefined) patch.tasks = normalizeTasks(body.tasks);
 
+  // Instruction files of steps that were removed are deleted together with the step.
+  if (patch.tasks) {
+    const kept = new Set(stepIdsOf(patch.tasks));
+    await removeStepHints(stepIdsOf(template.tasks).filter((id) => !kept.has(id)));
+  }
+
   const result = await collections.workflowTemplates.update(template.id, patch);
   await logAudit({
     user: req.user, action: 'update', entityType: 'workflowTemplate', entityId: template.id,
@@ -150,13 +203,15 @@ workflowsRouter.put('/workflow-templates/:id', requirePermission('workflow.manag
 workflowsRouter.post('/workflow-templates/:id/duplicate', requirePermission('workflow.manage'), asyncHandler(async (req, res) => {
   const template = await collections.workflowTemplates.getById(req.params.id);
   if (!template) throw notFound('Workflow template not found');
+  const tasks = normalizeTasks((template.tasks || []).map((t) => ({ ...t, id: null, steps: (t.steps || []).map((s) => ({ ...s, id: null })) })));
   const copy = await collections.workflowTemplates.insert({
     ...template,
     id: newId('wft'),
     name: `${template.name} (copy)`,
-    tasks: normalizeTasks((template.tasks || []).map((t) => ({ ...t, id: null, steps: (t.steps || []).map((s) => ({ ...s, id: null })) }))),
+    tasks,
     createdAt: nowIso()
   });
+  await copyStepHints(template.tasks || [], tasks);
   await logAudit({ user: req.user, action: 'create', entityType: 'workflowTemplate', entityId: copy.id, entityLabel: copy.name, details: `Duplicated from "${template.name}"` });
   res.status(201).json(copy);
 }));
@@ -173,6 +228,7 @@ workflowsRouter.patch('/workflow-templates/:id/status', requirePermission('workf
 workflowsRouter.delete('/workflow-templates/:id', requirePermission('workflow.manage'), asyncHandler(async (req, res) => {
   const template = await collections.workflowTemplates.getById(req.params.id);
   if (!template) throw notFound('Workflow template not found');
+  await removeStepHints(stepIdsOf(template.tasks));
   await collections.workflowTemplates.remove(template.id);
   await logAudit({ user: req.user, action: 'delete', entityType: 'workflowTemplate', entityId: template.id, entityLabel: template.name, details: 'Template deleted (existing projects are not affected)' });
   res.json({ ok: true });

@@ -253,28 +253,63 @@ export default function ProjectDetailPage() {
       <Tabs tabs={tabs} active={tab} onChange={setTab} />
 
       {tab === 'overview' ? (
-        <div className="grid grid-2">
-          <Card title="Project information">
-            <dl className="def-list">
-              <dt>Machine</dt><dd>{project.machineName}</dd>
-              <dt>Reference</dt><dd>{project.machineReference || '—'}</dd>
-              <dt>Serial number</dt><dd>{project.machineSerial || '—'}</dd>
-              <dt>Production line</dt><dd>{project.productionLine || '—'}</dd>
-              <dt>Department</dt><dd>{refs.departments.find((d) => d.id === project.departmentId)?.name || '—'}</dd>
-              <dt>Location</dt><dd>{refs.locations.find((l) => l.id === project.locationId)?.name || '—'}</dd>
-              <dt>Responsible</dt><dd>{userName(refs.users, project.responsibleUserId) || '—'}</dd>
-              <dt>Created by</dt><dd>{project.createdByName || '—'}</dd>
-              <dt>Start date</dt><dd>{fmtDate(project.startDate)}</dd>
-              <dt>Planned end</dt><dd>{fmtDate(project.plannedEndDate)} {project.overdue ? <span style={{ color: 'var(--red)' }}>(delayed)</span> : null}</dd>
-              <dt>Actual end</dt><dd>{project.actualEndDate ? fmtDateTime(project.actualEndDate) : '—'}</dd>
-            </dl>
+        <>
+          <div className="grid grid-2">
+            <Card title="Project information">
+              <dl className="def-list">
+                <dt>Machine</dt><dd>{project.machineName}</dd>
+                <dt>Reference</dt><dd>{project.machineReference || '—'}</dd>
+                <dt>Serial number</dt><dd>{project.machineSerial || '—'}</dd>
+                <dt>Production line</dt><dd>{project.productionLine || '—'}</dd>
+                <dt>Department</dt><dd>{refs.departments.find((d) => d.id === project.departmentId)?.name || '—'}</dd>
+                <dt>Location</dt><dd>{refs.locations.find((l) => l.id === project.locationId)?.name || '—'}</dd>
+                <dt>Responsible</dt><dd>{userName(refs.users, project.responsibleUserId) || '—'}</dd>
+                <dt>Created by</dt><dd>{project.createdByName || '—'}</dd>
+                <dt>Start date</dt><dd>{fmtDate(project.startDate)}</dd>
+                <dt>Planned end</dt><dd>{fmtDate(project.plannedEndDate)} {project.overdue ? <span style={{ color: 'var(--red)' }}>(delayed)</span> : null}</dd>
+                <dt>Actual end</dt><dd>{project.actualEndDate ? fmtDateTime(project.actualEndDate) : '—'}</dd>
+              </dl>
+            </Card>
+            <Card title="Description">
+              {project.description ? <p style={{ whiteSpace: 'pre-wrap' }}>{project.description}</p> : <span className="muted">No description</span>}
+              <div className="divider" />
+              <div className="small muted">Created {fmtDateTime(project.createdAt)}</div>
+            </Card>
+          </div>
+
+          <Card title="Required tools & components" className="mt-16">
+            {(!project.requirements || (project.requirements.tools.length === 0 && project.requirements.components.length === 0)) ? (
+              <div className="small muted">No tools or components required by the tasks of this project.</div>
+            ) : (
+              <div className="grid grid-2">
+                <div>
+                  <div className="small strong mb-8"><Icon name="tools" size={13} /> Tools</div>
+                  {project.requirements.tools.length === 0 ? <div className="small muted">None</div> : (
+                    <ul style={{ margin: 0, paddingLeft: 18 }}>
+                      {project.requirements.tools.map((r) => (
+                        <li key={r.id} className="small">
+                          {r.name}{r.quantity > 1 ? ` × ${r.quantity}` : ''}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <div>
+                  <div className="small strong mb-8"><Icon name="components" size={13} /> Components</div>
+                  {project.requirements.components.length === 0 ? <div className="small muted">None</div> : (
+                    <ul style={{ margin: 0, paddingLeft: 18 }}>
+                      {project.requirements.components.map((r) => (
+                        <li key={r.id} className="small">
+                          {r.name}{r.quantity > 0 ? ` × ${Math.round(r.quantity * 100) / 100}${r.unit ? ` ${r.unit}` : ''}` : ''}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            )}
           </Card>
-          <Card title="Description">
-            {project.description ? <p style={{ whiteSpace: 'pre-wrap' }}>{project.description}</p> : <span className="muted">No description</span>}
-            <div className="divider" />
-            <div className="small muted">Created {fmtDateTime(project.createdAt)}</div>
-          </Card>
-        </div>
+        </>
       ) : null}
 
       {tab === 'tasks' ? (

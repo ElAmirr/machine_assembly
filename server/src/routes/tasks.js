@@ -39,6 +39,8 @@ function mergeSteps(existingSteps, incomingSteps) {
     return {
       id: old?.id || newId('step'),
       order: index + 1,
+      // Keep the template link so instruction files stay attached after task edits.
+      sourceTemplateStepId: str(s.sourceTemplateStepId) || old?.sourceTemplateStepId || null,
       title: str(s.title) || old?.title || `Step ${index + 1}`,
       description: str(s.description),
       instructions: str(s.instructions),
@@ -46,7 +48,6 @@ function mergeSteps(existingSteps, incomingSteps) {
       durationUnit: s.durationUnit || 'days',
       roleId: strOrNull(s.roleId),
       assignedUserId: strOrNull(s.assignedUserId),
-      materials: normReq(s.materials, 'materialId'),
       components: normReq(s.components, 'componentId'),
       tools: normReq(s.tools, 'toolId'),
       evidenceRequired: s.evidenceRequired !== false,
@@ -182,6 +183,32 @@ tasksRouter.get('/tasks/:id', requirePermission('tasks.view'), asyncHandler(asyn
   const attachmentById = new Map(attachmentRows.map((a) => [a.id, a]));
   const projectType = project ? lookups.projectTypeById.get(project.projectTypeId) : null;
 
+  // Instruction files (hints) attached to the workflow template steps this task was created from.
+  // They are resolved live, so updated work instructions reach running projects too.
+  const hintRows = [];
+  {
+    const templateToProjectStep = new Map(); // template step id -> project step id
+    for (const step of task.steps || []) {
+      if (step.sourceTemplateStepId) templateToProjectStep.set(step.sourceTemplateStepId, step.id);
+    }
+    // Older projects have no stored step link: match the template by task/step order + title.
+    const linked = new Set(templateToProjectStep.values());
+    const unlinked = (task.steps || []).filter((s) => !linked.has(s.id));
+    if (unlinked.length > 0 && project?.templateId) {
+      const template = await collections.workflowTemplates.getById(project.templateId);
+      const tplTask = (template?.tasks || []).find((t) => (t.order || 0) === (task.order || 0));
+      for (const step of unlinked) {
+        const tplStep = (tplTask?.steps || []).find((s) => (s.order || 0) === (step.order || 0));
+        if (tplStep && str(tplStep.title) === str(step.title)) templateToProjectStep.set(tplStep.id, step.id);
+      }
+    }
+    const sourceIds = [...templateToProjectStep.keys()];
+    if (sourceIds.length > 0) {
+      const rows = await collections.attachments.find((a) => a.ownerType === 'template_step' && sourceIds.includes(a.ownerId));
+      for (const row of rows) hintRows.push({ ...row, stepId: templateToProjectStep.get(row.ownerId) });
+    }
+  }
+
   const perms = req.permissions || [];
   const canReview = perms.includes('*') || perms.includes('approvals.approve');
   const canWork =
@@ -219,6 +246,9 @@ tasksRouter.get('/tasks/:id', requirePermission('tasks.view'), asyncHandler(asyn
       .map((c) => ({ ...c, userName: lookups.userName(c.userId) }))
       .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt))),
     attachments: [...attachmentRows, ...projectAttachments]
+      .map((a) => ({ ...serializeAttachment(a), uploadedByName: lookups.userName(a.uploadedBy) })),
+    hints: hintRows
+      .sort((a, b) => String(a.uploadedAt || a.createdAt).localeCompare(String(b.uploadedAt || b.createdAt)))
       .map((a) => ({ ...serializeAttachment(a), uploadedByName: lookups.userName(a.uploadedBy) })),
     refs: {
       users: lookups.users.filter((u) => u.active !== false).map((u) => ({
@@ -268,7 +298,6 @@ tasksRouter.put('/tasks/:id', requirePermission('tasks.edit'), asyncHandler(asyn
   if (body.dependsOn !== undefined) {
     patch.dependsOn = idArray(body.dependsOn).filter((id) => validDeps.has(id) && id !== task.id);
   }
-  if (body.materials !== undefined) patch.materials = normReq(body.materials, 'materialId');
   if (body.components !== undefined) patch.components = normReq(body.components, 'componentId');
   if (body.tools !== undefined) patch.tools = normReq(body.tools, 'toolId');
   if (body.progress !== undefined && (task.steps || []).length === 0) {

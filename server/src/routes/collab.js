@@ -36,7 +36,18 @@ async function resolveOwner(ownerType, ownerId) {
     }
     throw notFound('Step not found');
   }
-  throw badRequest('ownerType must be project, task or step');
+  if (ownerType === 'template_step') {
+    // Instruction files (work-instruction photos/PDFs) attached to a step of a workflow template.
+    const templates = await collections.workflowTemplates.all();
+    for (const template of templates) {
+      for (const task of template.tasks || []) {
+        const step = (task.steps || []).find((s) => s.id === ownerId);
+        if (step) return { projectId: null, taskId: null, templateId: template.id, label: `${template.name} - ${step.title}` };
+      }
+    }
+    throw notFound('Workflow step not found');
+  }
+  throw badRequest('ownerType must be project, task, step or template_step');
 }
 
 collabRouter.post('/attachments', requirePermission('attachments.upload'), upload.single('file'), asyncHandler(async (req, res) => {
@@ -44,6 +55,10 @@ collabRouter.post('/attachments', requirePermission('attachments.upload'), uploa
   const ownerType = str(req.body?.ownerType);
   const ownerId = str(req.body?.ownerId);
   const owner = await resolveOwner(ownerType, ownerId);
+  // Instruction files on workflow steps are managed like the workflow itself (admin / workflow managers).
+  if (ownerType === 'template_step' && !(req.permissions.includes('*') || req.permissions.includes('workflow.manage'))) {
+    throw forbidden('Only workflow managers can attach instruction files to workflow steps');
+  }
 
   const saved = await saveBlob(req.file.buffer, req.file.originalname);
   const attachment = await collections.attachments.insert({
@@ -52,6 +67,7 @@ collabRouter.post('/attachments', requirePermission('attachments.upload'), uploa
     ownerId,
     projectId: owner.projectId,
     taskId: owner.taskId,
+    templateId: owner.templateId || null,
     filename: str(req.file.originalname) || 'file',
     storedRel: saved.storedRel,
     ext: (req.file.originalname.match(/\.[^.]*$/)?.[0] || '').toLowerCase(),
@@ -76,6 +92,7 @@ collabRouter.get('/attachments', requirePermission('attachments.view'), asyncHan
   const lookups = await buildLookups();
   let rows;
   if (ownerType && ownerId) rows = await collections.attachments.find({ ownerType: str(ownerType), ownerId: str(ownerId) });
+  else if (ownerType) rows = await collections.attachments.find({ ownerType: str(ownerType) });
   else if (taskId) rows = await collections.attachments.find({ taskId: str(taskId) });
   else if (projectId) rows = await collections.attachments.find({ projectId: str(projectId) });
   else rows = await collections.attachments.all();

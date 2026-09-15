@@ -1,11 +1,11 @@
 // Workflow template editor (spec section 6): tasks, steps, requirements, evidence & measurement config.
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
-import { Card, Icon, Loading, ErrorBlock, Field, Empty } from '../components/ui.jsx';
-import { classNames } from '../utils.js';
+import { Card, Icon, Loading, ErrorBlock, Field, Empty, AuthImage } from '../components/ui.jsx';
+import { fmtBytes } from '../utils.js';
 
 const UNITS = [
   { key: 'minutes', label: 'Minutes' },
@@ -21,7 +21,7 @@ function newStep(order) {
     id: tmpId('wts'),
     title: '', description: '', instructions: '',
     estimatedDuration: 0, durationUnit: 'days', roleId: null,
-    materials: [], components: [], tools: [],
+    components: [], tools: [],
     evidenceRequired: false, evidenceTypes: [], minFiles: 1, maxFiles: null,
     measurement: { enabled: false, name: '', expected: null, tolerance: 0, unit: '', required: true },
     approvalRequired: false, notes: ''
@@ -34,7 +34,7 @@ function newTask(order) {
     name: '', description: '', roleId: null,
     estimatedDuration: 1, durationUnit: 'days',
     approvalRequired: false, sequentialSteps: true,
-    dependsOn: [], materials: [], components: [], tools: [], steps: []
+    dependsOn: [], components: [], tools: [], steps: []
   };
 }
 
@@ -68,9 +68,59 @@ function ReqRows({ idKey, rows, options, onChange, label }) {
   );
 }
 
+// ------------------------------------------------------------------ hint files (work instructions)
+
+function StepHints({ files, canManage, enabled, onUpload, onDelete }) {
+  const inputRef = useRef(null);
+  const rows = [...(files || [])].sort((a, b) =>
+    String(b.uploadedAt || b.createdAt).localeCompare(String(a.uploadedAt || a.createdAt)));
+
+  return (
+    <Field label="Hint files (work instructions shown to the technician)">
+      <div>
+        {rows.length === 0 ? <div className="small muted" style={{ marginBottom: 8 }}>No hint files yet.</div> : null}
+        {rows.map((f) => (
+          <div className="evidence-item" key={f.id}>
+            <div className="evidence-thumb">
+              {String(f.mimeType || '').startsWith('image/')
+                ? <AuthImage attachmentId={f.id} alt={f.filename} />
+                : <Icon name="file" size={20} />}
+            </div>
+            <div className="grow" style={{ minWidth: 0 }}>
+              <div className="strong" style={{ overflowWrap: 'anywhere' }}>{f.filename}</div>
+              <div className="small muted">{fmtBytes(f.size)} · uploaded by {f.uploadedByName || '—'}</div>
+            </div>
+            <div className="flex" style={{ flexShrink: 0 }}>
+              <a className="icon-btn" title="Download" href={api.fileUrl(f.id, false)}><Icon name="download" size={15} /></a>
+              {canManage ? (
+                <button type="button" className="icon-btn" title="Delete" onClick={() => onDelete(f)}><Icon name="trash" size={15} /></button>
+              ) : null}
+            </div>
+          </div>
+        ))}
+        {canManage ? (
+          <>
+            <input ref={inputRef} type="file" style={{ display: 'none' }} onChange={(e) => { onUpload(e.target.files?.[0]); e.target.value = ''; }} />
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              disabled={!enabled}
+              title={enabled ? 'Upload a hint file' : 'Save the template once so the step exists before uploading'}
+              onClick={() => inputRef.current?.click()}
+            >
+              <Icon name="upload" size={13} /> Add hint file
+            </button>
+            {!enabled ? <div className="small muted" style={{ marginTop: 8 }}>Save the template once to enable hint files for this new step.</div> : null}
+          </>
+        ) : null}
+      </div>
+    </Field>
+  );
+}
+
 // ------------------------------------------------------------------ step editor
 
-function StepEditor({ step, index, total, refs, onChange, onMove, onRemove }) {
+function StepEditor({ step, index, total, refs, hintFiles, hintEnabled, canManage, onHintUpload, onHintDelete, onChange, onMove, onRemove }) {
   const [open, setOpen] = useState(false);
   const patch = (p) => onChange({ ...step, ...p });
   const m = step.measurement || {};
@@ -128,9 +178,16 @@ function StepEditor({ step, index, total, refs, onChange, onMove, onRemove }) {
               </Field>
             </div>
 
-            <ReqRows idKey="materialId" label="Materials" rows={step.materials} options={refs.materials} onChange={(rows) => patch({ materials: rows })} />
             <ReqRows idKey="componentId" label="Components" rows={step.components} options={refs.components} onChange={(rows) => patch({ components: rows })} />
             <ReqRows idKey="toolId" label="Tools" rows={step.tools} options={refs.tools} onChange={(rows) => patch({ tools: rows })} />
+
+            <StepHints
+              files={hintFiles}
+              canManage={canManage}
+              enabled={hintEnabled}
+              onUpload={(file) => onHintUpload?.(step.id, file)}
+              onDelete={onHintDelete}
+            />
 
             <div className="divider" />
             <label className="checkbox-row">
@@ -219,7 +276,7 @@ function StepEditor({ step, index, total, refs, onChange, onMove, onRemove }) {
 
 // ------------------------------------------------------------------ task editor
 
-function TaskEditor({ task, index, total, refs, allTasks, onChange, onMove, onRemove, defaultOpen }) {
+function TaskEditor({ task, index, total, refs, allTasks, hintForStep, savedStepIds, canManage, onHintUpload, onHintDelete, onChange, onMove, onRemove, defaultOpen }) {
   const [open, setOpen] = useState(!!defaultOpen);
   const patch = (p) => onChange({ ...task, ...p });
 
@@ -277,7 +334,6 @@ function TaskEditor({ task, index, total, refs, allTasks, onChange, onMove, onRe
             </Field>
           </div>
 
-          <ReqRows idKey="materialId" label="Task-level materials" rows={task.materials} options={refs.materials} onChange={(rows) => patch({ materials: rows })} />
           <ReqRows idKey="componentId" label="Task-level components" rows={task.components} options={refs.components} onChange={(rows) => patch({ components: rows })} />
           <ReqRows idKey="toolId" label="Task-level tools" rows={task.tools} options={refs.tools} onChange={(rows) => patch({ tools: rows })} />
 
@@ -333,6 +389,11 @@ function TaskEditor({ task, index, total, refs, allTasks, onChange, onMove, onRe
                 index={i}
                 total={task.steps.length}
                 refs={refs}
+                hintFiles={hintForStep?.(s.id) || []}
+                hintEnabled={!!savedStepIds?.has(s.id)}
+                canManage={canManage}
+                onHintUpload={onHintUpload}
+                onHintDelete={onHintDelete}
                 onChange={(next) => patch({ steps: task.steps.map((x, j) => (j === i ? next : x)) })}
                 onMove={(dir) => moveStep(i, dir)}
                 onRemove={() => patch({ steps: task.steps.filter((_, j) => j !== i) })}
@@ -347,7 +408,7 @@ function TaskEditor({ task, index, total, refs, allTasks, onChange, onMove, onRe
 
 // ------------------------------------------------------------------ page
 
-const EMPTY_REFS = { users: [], roles: [], materials: [], components: [], tools: [], evidenceTypes: [], projectTypes: [] };
+const EMPTY_REFS = { users: [], roles: [], components: [], tools: [], evidenceTypes: [], projectTypes: [] };
 
 export default function WorkflowEditorPage() {
   const { id } = useParams();
@@ -361,20 +422,20 @@ export default function WorkflowEditorPage() {
   const [savedJson, setSavedJson] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [hints, setHints] = useState([]);
 
   useEffect(() => {
     (async () => {
       try {
-        const [users, roles, materials, components, tools, evidenceTypes, projectTypes] = await Promise.all([
+        const [users, roles, components, tools, evidenceTypes, projectTypes] = await Promise.all([
           api.get('/users').catch(() => []),
           api.get('/roles').catch(() => []),
-          api.get('/materials').catch(() => []),
           api.get('/components').catch(() => []),
           api.get('/tools').catch(() => []),
           api.get('/evidence-types').catch(() => []),
           api.get('/project-types').catch(() => [])
         ]);
-        setRefs({ users, roles, materials, components, tools, evidenceTypes, projectTypes });
+        setRefs({ users, roles, components, tools, evidenceTypes, projectTypes });
       } catch { /* refs stay empty */ }
     })();
   }, []);
@@ -401,7 +462,28 @@ export default function WorkflowEditorPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Hint files (work instructions) attached to template steps, resolved live for running projects too.
+  const loadHints = useCallback(async () => {
+    try { setHints(await api.get('/attachments?ownerType=template_step')); } catch { setHints([]); }
+  }, []);
+
+  useEffect(() => { loadHints(); }, [loadHints]);
+
   const dirty = useMemo(() => !!draft && JSON.stringify(draft) !== savedJson, [draft, savedJson]);
+
+  // Step ids persisted on the server — hint files can only be uploaded for saved steps.
+  const savedStepIds = useMemo(() => {
+    const ids = new Set();
+    if (!savedJson) return ids;
+    try {
+      const parsed = JSON.parse(savedJson);
+      for (const t of parsed.tasks || []) {
+        for (const s of t.steps || []) if (s.id) ids.add(s.id);
+      }
+    } catch { /* ignore malformed json */ }
+    return ids;
+  }, [savedJson]);
+
   const canManage = hasPermission('workflow.manage');
 
   const patch = (p) => setDraft((d) => ({ ...d, ...p }));
@@ -430,6 +512,7 @@ export default function WorkflowEditorPage() {
         ? await api.post('/workflow-templates', payload)
         : await api.put(`/workflow-templates/${id}`, payload);
       show('Template saved', 'success');
+      loadHints();
       if (isNew) navigate(`/workflows/${result.id}`, { replace: true });
       else {
         setDraft({ name: result.name, description: result.description || '', projectTypeId: result.projectTypeId, active: result.active !== false, tasks: result.tasks || [] });
@@ -463,6 +546,37 @@ export default function WorkflowEditorPage() {
       await api.del(`/workflow-templates/${id}`);
       show('Template deleted', 'success');
       navigate('/workflows');
+    } catch (err) {
+      show(err.message, 'error');
+    }
+  };
+
+  const uploadHint = async (stepId, file) => {
+    if (!file) return;
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('ownerType', 'template_step');
+    fd.append('ownerId', stepId);
+    try {
+      await api.upload('/attachments', fd);
+      show('Hint file uploaded', 'success');
+      loadHints();
+    } catch (err) {
+      show(err.message, 'error');
+    }
+  };
+
+  const removeHint = async (att) => {
+    const ok = await confirm({
+      title: 'Delete hint file?',
+      message: `"${att.filename}" will be permanently deleted.`,
+      confirmLabel: 'Delete'
+    });
+    if (!ok) return;
+    try {
+      await api.del(`/attachments/${att.id}`);
+      show('Hint file deleted', 'success');
+      loadHints();
     } catch (err) {
       show(err.message, 'error');
     }
@@ -517,6 +631,11 @@ export default function WorkflowEditorPage() {
                   total={draft.tasks.length}
                   refs={refs}
                   allTasks={draft.tasks}
+                  hintForStep={(stepId) => hints.filter((h) => h.ownerId === stepId)}
+                  savedStepIds={savedStepIds}
+                  canManage={canManage}
+                  onHintUpload={uploadHint}
+                  onHintDelete={removeHint}
                   defaultOpen={draft.tasks.length === 1}
                   onChange={(next) => patch({ tasks: draft.tasks.map((x, j) => (j === i ? next : x)) })}
                   onMove={(dir) => moveTask(i, dir)}
@@ -548,7 +667,7 @@ export default function WorkflowEditorPage() {
           </Card>
 
           <div className="info-block mt-16 small">
-            <Icon name="workflow" size={14} /> Requirements (materials, components, tools) defined per step are automatically copied to the project tasks and shown to the technician.
+            <Icon name="workflow" size={14} /> Requirements (components, tools) defined per step are copied to the project tasks and shown to the technician. Hint files are linked live, so updating them also updates running projects.
           </div>
         </div>
       </div>

@@ -121,6 +121,27 @@ insightsRouter.get('/dashboard/my', requirePermission('tasks.view'), asyncHandle
   const mine = tasks.filter((t) =>
     t.assignedUserId === req.user.id || (t.steps || []).some((s) => s.assignedUserId === req.user.id)
   );
+
+  // Names of the tools/components the task needs, so technicians see them without opening it.
+  const requirementNames = (t) => {
+    const names = (rowsKey, idKey, byId) => {
+      const out = [];
+      const push = (rows) => {
+        for (const row of rows || []) {
+          const name = byId.get(row[idKey])?.name;
+          if (name && !out.includes(name)) out.push(name);
+        }
+      };
+      push(t[rowsKey]);
+      for (const step of t.steps || []) push(step[rowsKey]);
+      return out;
+    };
+    return {
+      tools: names('tools', 'toolId', lookups.toolById),
+      components: names('components', 'componentId', lookups.componentById)
+    };
+  };
+
   const simplify = (t) => ({
     id: t.id,
     name: t.name,
@@ -134,7 +155,8 @@ insightsRouter.get('/dashboard/my', requirePermission('tasks.view'), asyncHandle
     roleName: lookups.roleById.get(t.roleId)?.name || null,
     overdue: isOverdue(t),
     stepsDone: (t.steps || []).filter((s) => s.status === 'completed').length,
-    stepsTotal: (t.steps || []).length
+    stepsTotal: (t.steps || []).length,
+    requirements: requirementNames(t)
   });
 
   const today = new Date().toISOString().slice(0, 10);
@@ -447,9 +469,7 @@ const REPORT_BUILDERS = {
       { key: 'reference', label: 'Reference' },
       { key: 'unit', label: 'Unit' },
       { key: 'totalQuantity', label: 'Total quantity' },
-      { key: 'timesRequested', label: 'Requested in tasks' },
-      { key: 'stock', label: 'Stock quantity' },
-      { key: 'minStock', label: 'Minimum stock' }
+      { key: 'timesRequested', label: 'Requested in tasks' }
     ],
     build({ tasks, lookups }) {
       const usage = new Map();
@@ -475,12 +495,10 @@ const REPORT_BUILDERS = {
             reference: material.reference || '',
             unit: row.unit || material.unit || '',
             totalQuantity: Math.round(row.totalQuantity * 100) / 100,
-            timesRequested: row.timesRequested,
-            stock: material.stockQuantity ?? '',
-            minStock: material.minStock ?? ''
+            timesRequested: row.timesRequested
           };
         })
-        .filter((r) => r.timesRequested > 0 || r.stock !== '');
+        .filter((r) => r.timesRequested > 0);
     }
   }
 };

@@ -13,7 +13,6 @@ const KIND_CONFIG = {
     plural: 'Materials',
     managePerm: 'materials.manage',
     hasUnit: true,
-    stockFields: true,
     statuses: [{ key: 'active', label: 'Active' }, { key: 'inactive', label: 'Inactive' }]
   },
   components: {
@@ -56,10 +55,7 @@ function ItemModal({ cfg, item, onClose, onSaved }) {
     location: item?.location || '',
     description: item?.description || '',
     unit: item?.unit || '',
-    stockQuantity: item?.stockQuantity ?? '',
-    minStock: item?.minStock ?? '',
     quantity: item?.quantity ?? '',
-    price: item?.price ?? '',
     status: item?.status || cfg.statuses[0].key
   }));
   const [busy, setBusy] = useState(false);
@@ -80,17 +76,11 @@ function ItemModal({ cfg, item, onClose, onSaved }) {
         description: form.description,
         status: form.status
       };
-      if (cfg.stockFields) {
-        payload.unit = form.unit;
-        payload.stockQuantity = form.stockQuantity === '' ? null : Number(form.stockQuantity);
-        payload.minStock = form.minStock === '' ? null : Number(form.minStock);
-        payload.price = form.price === '' ? null : Number(form.price);
-      }
+      if (cfg.hasUnit) payload.unit = form.unit;
       if (cfg.qtyFields) {
         payload.partNumber = form.partNumber;
         payload.manufacturer = form.manufacturer;
         payload.quantity = form.quantity === '' ? null : Number(form.quantity);
-        payload.price = form.price === '' ? null : Number(form.price);
         if (cfg.key === 'components') payload.unit = form.unit;
       }
       if (editing) await api.put(`${cfg.path}/${item.id}`, payload);
@@ -134,7 +124,7 @@ function ItemModal({ cfg, item, onClose, onSaved }) {
           <Field label="Reference">
             <input className="input" value={form.reference} onChange={set('reference')} />
           </Field>
-          {cfg.stockFields ? (
+          {cfg.hasUnit ? (
             <Field label="Unit">
               <input className="input" value={form.unit} onChange={set('unit')} placeholder="pcs, m, kg…" />
             </Field>
@@ -151,24 +141,11 @@ function ItemModal({ cfg, item, onClose, onSaved }) {
           ) : null}
         </div>
         <div className="input-row">
-          {cfg.stockFields ? (
-            <>
-              <Field label="Stock quantity">
-                <input type="number" step="any" className="input" value={form.stockQuantity} onChange={set('stockQuantity')} />
-              </Field>
-              <Field label="Minimum stock (alert)">
-                <input type="number" step="any" className="input" value={form.minStock} onChange={set('minStock')} />
-              </Field>
-            </>
-          ) : null}
           {cfg.qtyFields ? (
             <Field label="Quantity">
               <input type="number" step="any" className="input" value={form.quantity} onChange={set('quantity')} />
             </Field>
           ) : null}
-          <Field label="Price">
-            <input type="number" step="any" className="input" value={form.price} onChange={set('price')} />
-          </Field>
           <Field label="Storage location">
             <input className="input" value={form.location} onChange={set('location')} />
           </Field>
@@ -194,7 +171,6 @@ export default function InventoryPage({ kind }) {
   const [error, setError] = useState('');
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');
-  const [lowStock, setLowStock] = useState(false);
   const [modal, setModal] = useState(null); // { item } | { item: null }
 
   const load = useCallback(async () => {
@@ -202,14 +178,13 @@ export default function InventoryPage({ kind }) {
       const qs = new URLSearchParams();
       if (q.trim()) qs.set('q', q.trim());
       if (status) qs.set('status', status);
-      if (lowStock && kind === 'materials') qs.set('lowStock', '1');
       setRows(await api.get(`${cfg.path}?${qs.toString()}`));
       setError('');
     } catch (err) {
       setError(err.message);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kind, q, status, lowStock]);
+  }, [kind, q, status]);
 
   useEffect(() => {
     const t = setTimeout(load, q ? 250 : 0);
@@ -262,12 +237,6 @@ export default function InventoryPage({ kind }) {
             <option value="">All statuses</option>
             {cfg.statuses.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
           </select>
-          {kind === 'materials' ? (
-            <label className="checkbox-row">
-              <input type="checkbox" checked={lowStock} onChange={(e) => setLowStock(e.target.checked)} />
-              Low stock only
-            </label>
-          ) : null}
         </div>
 
         {error ? <ErrorBlock message={error} /> : null}
@@ -280,48 +249,36 @@ export default function InventoryPage({ kind }) {
                 <tr>
                   <th>Name</th>
                   <th>Reference</th>
-                  {cfg.stockFields ? <th>Stock</th> : null}
                   {cfg.qtyFields ? <th>Quantity</th> : null}
-                  <th>Price</th>
+                  {cfg.hasUnit ? <th>Unit</th> : null}
                   <th>Location</th>
                   <th>Status</th>
                   <th className="actions" />
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => {
-                  const low = cfg.stockFields && (Number(r.stockQuantity) || 0) <= (Number(r.minStock) || 0) && Number(r.minStock) > 0;
-                  return (
-                    <tr key={r.id}>
-                      <td>
-                        <div className="strong">{r.name}</div>
-                        {r.partNumber ? <div className="small muted">P/N {r.partNumber}</div> : null}
-                        {r.description ? <div className="small muted">{r.description}</div> : null}
-                      </td>
-                      <td className="muted nowrap">{r.reference || '—'}</td>
-                      {cfg.stockFields ? (
-                        <td className="nowrap">
-                          <span className={classNames('badge', low ? 'badge-red' : 'badge-slate')}>
-                            {r.stockQuantity ?? 0} {r.unit || ''}
-                          </span>
-                          {low ? <div className="small" style={{ color: 'var(--red)' }}>min {r.minStock}</div> : null}
-                        </td>
+                {rows.map((r) => (
+                  <tr key={r.id}>
+                    <td>
+                      <div className="strong">{r.name}</div>
+                      {r.partNumber ? <div className="small muted">P/N {r.partNumber}</div> : null}
+                      {r.description ? <div className="small muted">{r.description}</div> : null}
+                    </td>
+                    <td className="muted nowrap">{r.reference || '—'}</td>
+                    {cfg.qtyFields ? <td className="muted">{r.quantity ?? '—'}</td> : null}
+                    {cfg.hasUnit ? <td className="muted">{r.unit || '—'}</td> : null}
+                    <td className="muted">{r.location || '—'}</td>
+                    <td>{statusBadge(r.status)}</td>
+                    <td className="actions">
+                      {canManage ? (
+                        <div className="flex" style={{ gap: 4, justifyContent: 'flex-end' }}>
+                          <button type="button" className="icon-btn" title="Edit" onClick={() => setModal({ item: r })}><Icon name="edit" size={15} /></button>
+                          <button type="button" className="icon-btn" title="Delete" onClick={() => remove(r)}><Icon name="trash" size={15} /></button>
+                        </div>
                       ) : null}
-                      {cfg.qtyFields ? <td className="muted">{r.quantity ?? '—'}</td> : null}
-                      <td className="muted">{r.price != null ? r.price : '—'}</td>
-                      <td className="muted">{r.location || '—'}</td>
-                      <td>{statusBadge(r.status)}</td>
-                      <td className="actions">
-                        {canManage ? (
-                          <div className="flex" style={{ gap: 4, justifyContent: 'flex-end' }}>
-                            <button type="button" className="icon-btn" title="Edit" onClick={() => setModal({ item: r })}><Icon name="edit" size={15} /></button>
-                            <button type="button" className="icon-btn" title="Delete" onClick={() => remove(r)}><Icon name="trash" size={15} /></button>
-                          </div>
-                        ) : null}
-                      </td>
-                    </tr>
-                  );
-                })}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

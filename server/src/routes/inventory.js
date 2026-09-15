@@ -15,7 +15,7 @@ const KINDS = {
     entityType: 'material',
     viewPermission: 'materials.view',
     managePermission: 'materials.manage',
-    numericFields: ['stockQuantity', 'minStock', 'price']
+    numericFields: []
   },
   components: {
     path: '/components',
@@ -23,7 +23,7 @@ const KINDS = {
     entityType: 'component',
     viewPermission: 'components.view',
     managePermission: 'components.manage',
-    numericFields: ['quantity', 'price']
+    numericFields: ['quantity']
   },
   tools: {
     path: '/tools',
@@ -31,7 +31,7 @@ const KINDS = {
     entityType: 'tool',
     viewPermission: 'tools.view',
     managePermission: 'tools.manage',
-    numericFields: ['quantity', 'price']
+    numericFields: ['quantity']
   }
 };
 
@@ -46,9 +46,6 @@ for (const kind of Object.values(KINDS)) {
     let rows = await collections[kind.entityType === 'material' ? 'materials' : kind.entityType === 'component' ? 'components' : 'tools'].all();
     const term = str(req.query.q).toLowerCase();
     if (req.query.status) rows = rows.filter((r) => (r.status || 'active') === str(req.query.status));
-    if (req.query.lowStock === '1' && kind.entityType === 'material') {
-      rows = rows.filter((r) => (Number(r.stockQuantity) || 0) <= (Number(r.minStock) || 0));
-    }
     if (term) {
       rows = rows.filter((r) =>
         [r.name, r.reference, r.partNumber, r.manufacturer, r.supplier, r.location, r.description]
@@ -79,7 +76,6 @@ function buildPatch(kind, body) {
   for (const key of text) if (body[key] !== undefined) patch[key] = normString(body, key);
   for (const key of kind.numericFields) if (body[key] !== undefined) patch[key] = toNum(body[key], null);
   if (body.status !== undefined) patch.status = str(body.status) || 'active';
-  if (body.price !== undefined) patch.price = toNum(body.price, null);
   return patch;
 }
 

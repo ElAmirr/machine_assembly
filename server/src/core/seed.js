@@ -108,18 +108,18 @@ export async function seedNow({ force = false, logger = console } = {}) {
 
   // ---------------------------------------------------------------- inventory
   const materialDefs = [
-    { name: 'Electrical Cable 2.5mm2', reference: 'MAT-CBL-25', unit: 'm', supplier: 'ElectroParts', stockQuantity: 250, minStock: 50, location: 'Spare Parts Storage' },
-    { name: 'Screws M4x20', reference: 'MAT-SCR-M4', unit: 'pcs', supplier: 'FastFix', stockQuantity: 1000, minStock: 200, location: 'Spare Parts Storage' },
-    { name: 'Cable Ties', reference: 'MAT-TIE-200', unit: 'pcs', supplier: 'ElectroParts', stockQuantity: 500, minStock: 100, location: 'Spare Parts Storage' },
-    { name: 'Cable Glands M16', reference: 'MAT-GLD-M16', unit: 'pcs', supplier: 'ElectroParts', stockQuantity: 120, minStock: 30, location: 'Spare Parts Storage' },
-    { name: 'Heat Shrink Tube', reference: 'MAT-HST-10', unit: 'm', supplier: 'ElectroParts', stockQuantity: 80, minStock: 20, location: 'Spare Parts Storage' },
-    { name: 'Thread Locking Compound', reference: 'MAT-TLC-01', unit: 'bottle', supplier: 'LoctitePro', stockQuantity: 12, minStock: 4, location: 'Workshop A' },
-    { name: 'Lubricant Grease', reference: 'MAT-GRS-01', unit: 'kg', supplier: 'MachineOil', stockQuantity: 15, minStock: 5, location: 'Workshop A' },
-    { name: 'Sensor Bracket', reference: 'MAT-BRK-SEN', unit: 'pcs', supplier: 'MechParts', stockQuantity: 40, minStock: 10, location: 'Storage B' }
+    { name: 'Electrical Cable 2.5mm2', reference: 'MAT-CBL-25', unit: 'm', supplier: 'ElectroParts', location: 'Spare Parts Storage' },
+    { name: 'Screws M4x20', reference: 'MAT-SCR-M4', unit: 'pcs', supplier: 'FastFix', location: 'Spare Parts Storage' },
+    { name: 'Cable Ties', reference: 'MAT-TIE-200', unit: 'pcs', supplier: 'ElectroParts', location: 'Spare Parts Storage' },
+    { name: 'Cable Glands M16', reference: 'MAT-GLD-M16', unit: 'pcs', supplier: 'ElectroParts', location: 'Spare Parts Storage' },
+    { name: 'Heat Shrink Tube', reference: 'MAT-HST-10', unit: 'm', supplier: 'ElectroParts', location: 'Spare Parts Storage' },
+    { name: 'Thread Locking Compound', reference: 'MAT-TLC-01', unit: 'bottle', supplier: 'LoctitePro', location: 'Workshop A' },
+    { name: 'Lubricant Grease', reference: 'MAT-GRS-01', unit: 'kg', supplier: 'MachineOil', location: 'Workshop A' },
+    { name: 'Sensor Bracket', reference: 'MAT-BRK-SEN', unit: 'pcs', supplier: 'MechParts', location: 'Storage B' }
   ];
   const materials = {};
   for (const def of materialDefs) {
-    const doc = await collections.materials.insert({ id: newId('mat'), description: '', status: 'active', price: null, ...def });
+    const doc = await collections.materials.insert({ id: newId('mat'), description: '', status: 'active', ...def });
     materials[def.name] = doc;
   }
 
