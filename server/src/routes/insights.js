@@ -121,27 +121,6 @@ insightsRouter.get('/dashboard/my', requirePermission('tasks.view'), asyncHandle
   const mine = tasks.filter((t) =>
     t.assignedUserId === req.user.id || (t.steps || []).some((s) => s.assignedUserId === req.user.id)
   );
-
-  // Names of the tools/components the task needs, so technicians see them without opening it.
-  const requirementNames = (t) => {
-    const names = (rowsKey, idKey, byId) => {
-      const out = [];
-      const push = (rows) => {
-        for (const row of rows || []) {
-          const name = byId.get(row[idKey])?.name;
-          if (name && !out.includes(name)) out.push(name);
-        }
-      };
-      push(t[rowsKey]);
-      for (const step of t.steps || []) push(step[rowsKey]);
-      return out;
-    };
-    return {
-      tools: names('tools', 'toolId', lookups.toolById),
-      components: names('components', 'componentId', lookups.componentById)
-    };
-  };
-
   const simplify = (t) => ({
     id: t.id,
     name: t.name,
@@ -155,8 +134,7 @@ insightsRouter.get('/dashboard/my', requirePermission('tasks.view'), asyncHandle
     roleName: lookups.roleById.get(t.roleId)?.name || null,
     overdue: isOverdue(t),
     stepsDone: (t.steps || []).filter((s) => s.status === 'completed').length,
-    stepsTotal: (t.steps || []).length,
-    requirements: requirementNames(t)
+    stepsTotal: (t.steps || []).length
   });
 
   const today = new Date().toISOString().slice(0, 10);
@@ -460,45 +438,6 @@ const REPORT_BUILDERS = {
           reason: a.reason || ''
         }))
         .sort((a, b) => String(b.submittedAt).localeCompare(String(a.submittedAt)));
-    }
-  },
-  'material-usage': {
-    title: 'Material usage (project demand)',
-    columns: [
-      { key: 'name', label: 'Material' },
-      { key: 'reference', label: 'Reference' },
-      { key: 'unit', label: 'Unit' },
-      { key: 'totalQuantity', label: 'Total quantity' },
-      { key: 'timesRequested', label: 'Requested in tasks' }
-    ],
-    build({ tasks, lookups }) {
-      const usage = new Map();
-      const add = (materialId, quantity, unit) => {
-        if (!materialId) return;
-        if (!usage.has(materialId)) usage.set(materialId, { totalQuantity: 0, timesRequested: 0, unit: unit || '' });
-        const row = usage.get(materialId);
-        row.totalQuantity += Number(quantity) || 0;
-        row.timesRequested += 1;
-        if (!row.unit && unit) row.unit = unit;
-      };
-      for (const task of tasks) {
-        for (const m of task.materials || []) add(m.materialId, m.quantity, m.unit);
-        for (const step of task.steps || []) {
-          for (const m of step.materials || []) add(m.materialId, m.quantity, m.unit);
-        }
-      }
-      return lookups.materials
-        .map((material) => {
-          const row = usage.get(material.id) || { totalQuantity: 0, timesRequested: 0, unit: material.unit || '' };
-          return {
-            name: material.name,
-            reference: material.reference || '',
-            unit: row.unit || material.unit || '',
-            totalQuantity: Math.round(row.totalQuantity * 100) / 100,
-            timesRequested: row.timesRequested
-          };
-        })
-        .filter((r) => r.timesRequested > 0);
     }
   }
 };

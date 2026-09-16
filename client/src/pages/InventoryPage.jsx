@@ -1,4 +1,4 @@
-// Generic inventory page for materials / components / tools (spec sections 16-18).
+// Generic inventory page for components / tools (spec sections 17-18).
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -7,14 +7,6 @@ import { Card, Icon, Loading, ErrorBlock, Empty, Modal, Field } from '../compone
 import { classNames } from '../utils.js';
 
 const KIND_CONFIG = {
-  materials: {
-    path: '/materials',
-    label: 'Material',
-    plural: 'Materials',
-    managePerm: 'materials.manage',
-    hasUnit: true,
-    statuses: [{ key: 'active', label: 'Active' }, { key: 'inactive', label: 'Inactive' }]
-  },
   components: {
     path: '/components',
     label: 'Component',
@@ -43,6 +35,10 @@ const statusTone = {
   maintenance: 'badge-amber', inactive: 'badge-slate', retired: 'badge-slate'
 };
 
+// Price and quantity are not used for now. Flip this to true to show them again in the
+// Tools/Components pages - the stored data and the API keep supporting both in the meantime.
+const SHOW_PRICE_QUANTITY = false;
+
 function ItemModal({ cfg, item, onClose, onSaved }) {
   const { show } = useToast();
   const editing = !!item;
@@ -56,6 +52,7 @@ function ItemModal({ cfg, item, onClose, onSaved }) {
     description: item?.description || '',
     unit: item?.unit || '',
     quantity: item?.quantity ?? '',
+    price: item?.price ?? '',
     status: item?.status || cfg.statuses[0].key
   }));
   const [busy, setBusy] = useState(false);
@@ -76,11 +73,13 @@ function ItemModal({ cfg, item, onClose, onSaved }) {
         description: form.description,
         status: form.status
       };
-      if (cfg.hasUnit) payload.unit = form.unit;
       if (cfg.qtyFields) {
         payload.partNumber = form.partNumber;
         payload.manufacturer = form.manufacturer;
-        payload.quantity = form.quantity === '' ? null : Number(form.quantity);
+        if (SHOW_PRICE_QUANTITY) {
+          payload.quantity = form.quantity === '' ? null : Number(form.quantity);
+          payload.price = form.price === '' ? null : Number(form.price);
+        }
         if (cfg.key === 'components') payload.unit = form.unit;
       }
       if (editing) await api.put(`${cfg.path}/${item.id}`, payload);
@@ -124,11 +123,6 @@ function ItemModal({ cfg, item, onClose, onSaved }) {
           <Field label="Reference">
             <input className="input" value={form.reference} onChange={set('reference')} />
           </Field>
-          {cfg.hasUnit ? (
-            <Field label="Unit">
-              <input className="input" value={form.unit} onChange={set('unit')} placeholder="pcs, m, kg…" />
-            </Field>
-          ) : null}
           {cfg.qtyFields ? (
             <>
               <Field label="Part number">
@@ -141,9 +135,14 @@ function ItemModal({ cfg, item, onClose, onSaved }) {
           ) : null}
         </div>
         <div className="input-row">
-          {cfg.qtyFields ? (
+          {SHOW_PRICE_QUANTITY && cfg.qtyFields ? (
             <Field label="Quantity">
               <input type="number" step="any" className="input" value={form.quantity} onChange={set('quantity')} />
+            </Field>
+          ) : null}
+          {SHOW_PRICE_QUANTITY ? (
+            <Field label="Price">
+              <input type="number" step="any" className="input" value={form.price} onChange={set('price')} />
             </Field>
           ) : null}
           <Field label="Storage location">
@@ -241,7 +240,7 @@ export default function InventoryPage({ kind }) {
 
         {error ? <ErrorBlock message={error} /> : null}
         {!rows ? <Loading /> : rows.length === 0 ? (
-          <Empty icon={kind === 'materials' ? 'materials' : kind === 'components' ? 'components' : 'tools'} title={`No ${cfg.plural.toLowerCase()} found`} />
+          <Empty icon={kind} title={`No ${cfg.plural.toLowerCase()} found`} />
         ) : (
           <div className="table-wrap">
             <table className="table">
@@ -249,36 +248,38 @@ export default function InventoryPage({ kind }) {
                 <tr>
                   <th>Name</th>
                   <th>Reference</th>
-                  {cfg.qtyFields ? <th>Quantity</th> : null}
-                  {cfg.hasUnit ? <th>Unit</th> : null}
+                  {SHOW_PRICE_QUANTITY && cfg.qtyFields ? <th>Quantity</th> : null}
+                  {SHOW_PRICE_QUANTITY ? <th>Price</th> : null}
                   <th>Location</th>
                   <th>Status</th>
                   <th className="actions" />
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id}>
-                    <td>
-                      <div className="strong">{r.name}</div>
-                      {r.partNumber ? <div className="small muted">P/N {r.partNumber}</div> : null}
-                      {r.description ? <div className="small muted">{r.description}</div> : null}
-                    </td>
-                    <td className="muted nowrap">{r.reference || '—'}</td>
-                    {cfg.qtyFields ? <td className="muted">{r.quantity ?? '—'}</td> : null}
-                    {cfg.hasUnit ? <td className="muted">{r.unit || '—'}</td> : null}
-                    <td className="muted">{r.location || '—'}</td>
-                    <td>{statusBadge(r.status)}</td>
-                    <td className="actions">
-                      {canManage ? (
-                        <div className="flex" style={{ gap: 4, justifyContent: 'flex-end' }}>
-                          <button type="button" className="icon-btn" title="Edit" onClick={() => setModal({ item: r })}><Icon name="edit" size={15} /></button>
-                          <button type="button" className="icon-btn" title="Delete" onClick={() => remove(r)}><Icon name="trash" size={15} /></button>
-                        </div>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))}
+                {rows.map((r) => {
+                  return (
+                    <tr key={r.id}>
+                      <td>
+                        <div className="strong">{r.name}</div>
+                        {r.partNumber ? <div className="small muted">P/N {r.partNumber}</div> : null}
+                        {r.description ? <div className="small muted">{r.description}</div> : null}
+                      </td>
+                      <td className="muted nowrap">{r.reference || '—'}</td>
+                      {SHOW_PRICE_QUANTITY && cfg.qtyFields ? <td className="muted">{r.quantity ?? '—'}</td> : null}
+                      {SHOW_PRICE_QUANTITY ? <td className="muted">{r.price != null ? r.price : '—'}</td> : null}
+                      <td className="muted">{r.location || '—'}</td>
+                      <td>{statusBadge(r.status)}</td>
+                      <td className="actions">
+                        {canManage ? (
+                          <div className="flex" style={{ gap: 4, justifyContent: 'flex-end' }}>
+                            <button type="button" className="icon-btn" title="Edit" onClick={() => setModal({ item: r })}><Icon name="edit" size={15} /></button>
+                            <button type="button" className="icon-btn" title="Delete" onClick={() => remove(r)}><Icon name="trash" size={15} /></button>
+                          </div>
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

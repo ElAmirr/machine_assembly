@@ -15,7 +15,6 @@ import PlanningPage from './pages/PlanningPage.jsx';
 import MachinesPage from './pages/MachinesPage.jsx';
 import WorkflowsPage from './pages/WorkflowsPage.jsx';
 import WorkflowEditorPage from './pages/WorkflowEditorPage.jsx';
-import MaterialsPage from './pages/MaterialsPage.jsx';
 import InventoryPage from './pages/InventoryPage.jsx';
 import PeoplePage from './pages/PeoplePage.jsx';
 import RolesPage from './pages/RolesPage.jsx';
@@ -75,7 +74,6 @@ export default function App() {
         <Route path="/machines" element={<RequirePermission perm="projects.view"><MachinesPage /></RequirePermission>} />
         <Route path="/workflows" element={<RequirePermission perm="workflow.view"><WorkflowsPage /></RequirePermission>} />
         <Route path="/workflows/:id" element={<RequirePermission perm="workflow.view"><WorkflowEditorPage /></RequirePermission>} />
-        <Route path="/materials" element={<RequirePermission perm="materials.view"><MaterialsPage /></RequirePermission>} />
         <Route path="/components" element={<RequirePermission perm="components.view"><InventoryPage kind="components" /></RequirePermission>} />
         <Route path="/tools" element={<RequirePermission perm="tools.view"><InventoryPage kind="tools" /></RequirePermission>} />
         <Route path="/people" element={<RequirePermission perm="users.view"><PeoplePage /></RequirePermission>} />

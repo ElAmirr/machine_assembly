@@ -90,9 +90,6 @@ check('GET /api/users', users.status === 200 && Array.isArray(users.data), `coun
 const roles = await call('GET', '/api/roles', { token });
 check('GET /api/roles', roles.status === 200 && Array.isArray(roles.data), `count=${roles.data?.length}`);
 
-const materials = await call('GET', '/api/materials', { token });
-check('GET /api/materials', materials.status === 200 && Array.isArray(materials.data), `count=${materials.data?.length}`);
-
 const components = await call('GET', '/api/components', { token });
 check('GET /api/components', components.status === 200 && Array.isArray(components.data), `count=${components.data?.length}`);
 

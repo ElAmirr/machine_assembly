@@ -20,7 +20,6 @@ const COLLECTION_DEFS = {
   workflowTemplates: [],
   projects: [],
   tasks: [],
-  materials: [],
   components: [],
   tools: [],
   attachments: [],

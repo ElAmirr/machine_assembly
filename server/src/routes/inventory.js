@@ -1,4 +1,4 @@
-// Inventory module: materials (spec 16), components (spec 17), tools (spec 18).
+// Inventory module: components (spec 17), tools (spec 18).
 import { Router } from 'express';
 import { collections } from '../storage/db.js';
 import { requireAuth, requirePermission } from '../middleware/auth.js';
@@ -9,21 +9,13 @@ export const inventoryRouter = Router();
 inventoryRouter.use(requireAuth);
 
 const KINDS = {
-  materials: {
-    path: '/materials',
-    label: 'Material',
-    entityType: 'material',
-    viewPermission: 'materials.view',
-    managePermission: 'materials.manage',
-    numericFields: []
-  },
   components: {
     path: '/components',
     label: 'Component',
     entityType: 'component',
     viewPermission: 'components.view',
     managePermission: 'components.manage',
-    numericFields: ['quantity']
+    numericFields: ['quantity', 'price']
   },
   tools: {
     path: '/tools',
@@ -31,7 +23,7 @@ const KINDS = {
     entityType: 'tool',
     viewPermission: 'tools.view',
     managePermission: 'tools.manage',
-    numericFields: ['quantity']
+    numericFields: ['quantity', 'price']
   }
 };
 
@@ -43,7 +35,7 @@ function normString(body, key) {
 
 for (const kind of Object.values(KINDS)) {
   inventoryRouter.get(kind.path, requirePermission(kind.viewPermission), asyncHandler(async (req, res) => {
-    let rows = await collections[kind.entityType === 'material' ? 'materials' : kind.entityType === 'component' ? 'components' : 'tools'].all();
+    let rows = await collections[kind.entityType === 'component' ? 'components' : 'tools'].all();
     const term = str(req.query.q).toLowerCase();
     if (req.query.status) rows = rows.filter((r) => (r.status || 'active') === str(req.query.status));
     if (term) {
@@ -57,7 +49,7 @@ for (const kind of Object.values(KINDS)) {
   }));
 
   inventoryRouter.get(`${kind.path}/:id`, requirePermission(kind.viewPermission), asyncHandler(async (req, res) => {
-    const collection = collections[kind.entityType === 'material' ? 'materials' : kind.entityType === 'component' ? 'components' : 'tools'];
+    const collection = collections[kind.entityType === 'component' ? 'components' : 'tools'];
     const doc = await collection.getById(req.params.id);
     if (!doc) throw notFound(`${kind.label} not found`);
     res.json(doc);
@@ -67,7 +59,7 @@ for (const kind of Object.values(KINDS)) {
 // ------------------------------------------------------------ create / update / delete
 
 function collectionOf(kind) {
-  return collections[kind.entityType === 'material' ? 'materials' : kind.entityType === 'component' ? 'components' : 'tools'];
+  return collections[kind.entityType === 'component' ? 'components' : 'tools'];
 }
 
 function buildPatch(kind, body) {
@@ -76,6 +68,7 @@ function buildPatch(kind, body) {
   for (const key of text) if (body[key] !== undefined) patch[key] = normString(body, key);
   for (const key of kind.numericFields) if (body[key] !== undefined) patch[key] = toNum(body[key], null);
   if (body.status !== undefined) patch.status = str(body.status) || 'active';
+  if (body.price !== undefined) patch.price = toNum(body.price, null);
   return patch;
 }
 
@@ -124,12 +117,13 @@ for (const kind of Object.values(KINDS)) {
     if (!doc) throw notFound(`${kind.label} not found`);
 
     // Refuse to delete while referenced by tasks, templates or projects.
-    const idKey = kind.entityType === 'material' ? 'materialId' : kind.entityType === 'component' ? 'componentId' : 'toolId';
+    const idKey = kind.entityType === 'component' ? 'componentId' : 'toolId';
+    const rowsKey = kind.entityType === 'component' ? 'components' : 'tools';
     const [tasks, templates] = await Promise.all([collections.tasks.all(), collections.workflowTemplates.all()]);
-    const inTasks = tasks.some((t) => (t[idKey === 'materialId' ? 'materials' : idKey === 'componentId' ? 'components' : 'tools'] || []).some((r) => r[idKey] === doc.id)
-      || (t.steps || []).some((s) => (s[idKey === 'materialId' ? 'materials' : idKey === 'componentId' ? 'components' : 'tools'] || []).some((r) => r[idKey] === doc.id)));
-    const inTemplates = templates.some((t) => (t.tasks || []).some((task) => (task.materials || []).some((r) => r[idKey] === doc.id)
-      || (task.steps || []).some((s) => (s[idKey === 'materialId' ? 'materials' : idKey === 'componentId' ? 'components' : 'tools'] || []).some((r) => r[idKey] === doc.id))));
+    const inTasks = tasks.some((t) => (t[rowsKey] || []).some((r) => r[idKey] === doc.id)
+      || (t.steps || []).some((s) => (s[rowsKey] || []).some((r) => r[idKey] === doc.id)));
+    const inTemplates = templates.some((t) => (t.tasks || []).some((task) =>
+      (task.steps || []).some((s) => (s[rowsKey] || []).some((r) => r[idKey] === doc.id))));
     if (inTasks || inTemplates) {
       throw conflict(`This ${kind.label.toLowerCase()} is referenced by tasks or workflow templates. Set its status to inactive instead of deleting.`);
     }

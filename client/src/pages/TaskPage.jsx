@@ -656,7 +656,8 @@ export default function TaskPage() {
   const steps = [...(task.steps || [])].sort((a, b) => (a.order || 0) - (b.order || 0));
   const doneTask = ['completed', 'approved'].includes(task.status);
 
-  // Tools/components of the task + all its steps, rolled up for a quick overview.
+  // Tools/components required by the task itself and by all of its steps, rolled up for a quick
+  // overview (components are consumables - quantities add up; tools are reusable - highest wins).
   const requirementRows = (rowsKey, idKey, list, totalize) => {
     const byId = new Map((list || []).map((x) => [x.id, x]));
     const map = new Map();
@@ -664,7 +665,7 @@ export default function TaskPage() {
       for (const r of rows || []) {
         const item = byId.get(r[idKey]);
         if (!item) continue;
-        const qty = Number(r.quantity) || 0;
+        const qty = Number(r.quantity) || 1;
         const cur = map.get(r[idKey]) || { [idKey]: r[idKey], quantity: 0, unit: '' };
         cur.quantity = totalize ? cur.quantity + qty : Math.max(cur.quantity, qty);
         if (!cur.unit) cur.unit = r.unit || item.unit || '';
@@ -676,8 +677,8 @@ export default function TaskPage() {
     return [...map.values()];
   };
   const taskRequirements = {
-    components: requirementRows('components', 'componentId', refs.components, true),
-    tools: requirementRows('tools', 'toolId', refs.tools, false)
+    tools: requirementRows('tools', 'toolId', refs.tools, false),
+    components: requirementRows('components', 'componentId', refs.components, true)
   };
   const taskSubmitted = task.status === 'submitted';
   const canOverride = hasPermission('tasks.override');

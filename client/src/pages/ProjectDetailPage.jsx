@@ -288,7 +288,7 @@ export default function ProjectDetailPage() {
                     <ul style={{ margin: 0, paddingLeft: 18 }}>
                       {project.requirements.tools.map((r) => (
                         <li key={r.id} className="small">
-                          {r.name}{r.quantity > 1 ? ` × ${r.quantity}` : ''}
+                          {r.name}{r.quantity > 1 ? ` × ${r.quantity}${r.unit ? ` ${r.unit}` : ''}` : ''}
                         </li>
                       ))}
                     </ul>
@@ -300,7 +300,7 @@ export default function ProjectDetailPage() {
                     <ul style={{ margin: 0, paddingLeft: 18 }}>
                       {project.requirements.components.map((r) => (
                         <li key={r.id} className="small">
-                          {r.name}{r.quantity > 0 ? ` × ${Math.round(r.quantity * 100) / 100}${r.unit ? ` ${r.unit}` : ''}` : ''}
+                          {r.name}{r.quantity > 1 ? ` × ${r.quantity}${r.unit ? ` ${r.unit}` : ''}` : ''}
                         </li>
                       ))}
                     </ul>

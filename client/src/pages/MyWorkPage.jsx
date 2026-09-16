@@ -5,22 +5,12 @@ import { api } from '../api.js';
 import { Card, Loading, ErrorBlock, StatusBadge, ProgressBar, Empty, Icon } from '../components/ui.jsx';
 import { dueLabel, fmtDate } from '../utils.js';
 
-function requirementsText(task) {
-  const r = task.requirements || {};
-  const parts = [];
-  if ((r.tools || []).length) parts.push(`Tools: ${r.tools.join(', ')}`);
-  if ((r.components || []).length) parts.push(`Components: ${r.components.join(', ')}`);
-  return parts.join(' · ');
-}
-
 function TaskRow({ task, onOpen }) {
-  const reqText = requirementsText(task);
   return (
     <tr className="clickable" onClick={() => onOpen(task.id)}>
       <td>
         <div className="strong">{task.name}</div>
         <div className="small muted">{task.machineName} · {task.projectCode}</div>
-        {reqText ? <div className="small muted" style={{ marginTop: 2 }}>{reqText}</div> : null}
       </td>
       <td>{task.stepsTotal > 0 ? <span className="small muted">{task.stepsDone}/{task.stepsTotal} steps</span> : <span className="small muted">no steps</span>}</td>
       <td style={{ minWidth: 110 }}><ProgressBar value={task.progress} /></td>

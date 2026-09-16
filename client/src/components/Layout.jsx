@@ -220,9 +220,8 @@ export default function Layout() {
           {hasPermission('projects.view') ? <NavItem to="/planning" icon="planning" label="Planning" onClick={close} /> : null}
           {hasPermission('projects.view') ? <NavItem to="/machines" icon="machines" label="Machines" onClick={close} /> : null}
 
-          {hasPermission(['workflow.view', 'materials.view', 'components.view', 'tools.view']) ? <div className="nav-section">Engineering</div> : null}
+          {hasPermission(['workflow.view', 'components.view', 'tools.view']) ? <div className="nav-section">Engineering</div> : null}
           {hasPermission('workflow.view') ? <NavItem to="/workflows" icon="workflow" label="Workflows" onClick={close} /> : null}
-          {hasPermission('materials.view') ? <NavItem to="/materials" icon="materials" label="Materials" onClick={close} /> : null}
           {hasPermission('components.view') ? <NavItem to="/components" icon="components" label="Components" onClick={close} /> : null}
           {hasPermission('tools.view') ? <NavItem to="/tools" icon="tools" label="Tools" onClick={close} /> : null}
 

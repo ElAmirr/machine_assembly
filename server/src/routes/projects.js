@@ -35,7 +35,9 @@ function enrichTask(task, lookups, taskById) {
   };
 }
 
-/** Rolls up the tools/components required across a project's tasks (incl. steps) so they are visible on open. */
+/** Rolls up the tools/components required by a project's tasks and their steps, so the project
+ *  overview shows every step-level requirement (components are consumables - quantities add up;
+ *  tools are reusable - the highest quantity wins). */
 function aggregateRequirements(tasks, lookups) {
   const collect = (rowsKey, idKey, byId, totalize) => {
     const map = new Map();
@@ -45,11 +47,10 @@ function aggregateRequirements(tasks, lookups) {
         const id = str(row[idKey]);
         const item = id ? byId.get(id) : null;
         if (!item) continue;
-        const qty = Number(row.quantity) || 0;
-        const entry = map.get(id) || { id, name: item.name, unit: item.unit || '', quantity: 0, occurrences: 0 };
+        const qty = toNum(row.quantity, 1);
+        const entry = map.get(id) || { id, name: item.name, unit: item.unit || '', quantity: 0 };
         entry.quantity = totalize ? entry.quantity + qty : Math.max(entry.quantity, qty);
-        entry.occurrences += 1;
-        if (!entry.unit && row.unit) entry.unit = row.unit;
+        if (!entry.unit && row.unit) entry.unit = str(row.unit);
         map.set(id, entry);
       }
     }

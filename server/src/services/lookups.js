@@ -6,14 +6,13 @@ function byId(arr) {
 }
 
 export async function buildLookups() {
-  const [roles, users, departments, locations, projectTypes, evidenceTypes, materials, components, tools] = await Promise.all([
+  const [roles, users, departments, locations, projectTypes, evidenceTypes, components, tools] = await Promise.all([
     collections.roles.all(),
     collections.users.all(),
     collections.departments.all(),
     collections.locations.all(),
     collections.projectTypes.all(),
     collections.evidenceTypes.all(),
-    collections.materials.all(),
     collections.components.all(),
     collections.tools.all()
   ]);
@@ -26,7 +25,6 @@ export async function buildLookups() {
     locations,
     projectTypes,
     evidenceTypes,
-    materials,
     components,
     tools,
     roleById: byId(roles),
@@ -35,7 +33,6 @@ export async function buildLookups() {
     locationById: byId(locations),
     projectTypeById: byId(projectTypes),
     evidenceTypeById: byId(evidenceTypes),
-    materialById: byId(materials),
     componentById: byId(components),
     toolById: byId(tools),
     userName(userId) {

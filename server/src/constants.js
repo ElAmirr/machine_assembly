@@ -112,8 +112,6 @@ export const PERMISSION_CATALOG = [
   {
     group: 'Inventory',
     permissions: [
-      { key: 'materials.view', label: 'View materials' },
-      { key: 'materials.manage', label: 'Manage materials' },
       { key: 'components.view', label: 'View components' },
       { key: 'components.manage', label: 'Manage components' },
       { key: 'tools.view', label: 'View tools' },
@@ -149,13 +147,13 @@ export const ROLE_DEFAULT_PERMISSIONS = {
     'tasks.view', 'tasks.create', 'tasks.edit', 'tasks.complete', 'tasks.override',
     'steps.view', 'steps.create', 'steps.edit', 'steps.complete',
     'workflow.view', 'workflow.manage',
-    'materials.view', 'materials.manage', 'components.view', 'components.manage', 'tools.view', 'tools.manage',
+    'components.view', 'components.manage', 'tools.view', 'tools.manage',
     'attachments.view', 'attachments.upload', 'attachments.manage',
     'approvals.submit', 'approvals.approve', 'reports.view'
   ],
   Technician: [
     'projects.view', 'tasks.view', 'tasks.complete', 'steps.view', 'steps.complete',
-    'workflow.view', 'materials.view', 'components.view', 'tools.view',
+    'workflow.view', 'components.view', 'tools.view',
     'attachments.view', 'attachments.upload', 'approvals.submit'
   ]
 };

@@ -46,7 +46,7 @@ export default function AuditPage() {
     return () => clearTimeout(t);
   }, [load, q]);
 
-  const entityTypes = ['project', 'task', 'step', 'evidence', 'user', 'role', 'workflowTemplate', 'material', 'component', 'tool', 'comment', 'attachment', 'settings'];
+  const entityTypes = ['project', 'task', 'step', 'evidence', 'user', 'role', 'workflowTemplate', 'component', 'tool', 'comment', 'attachment', 'settings'];
   const actions = ['create', 'update', 'delete', 'start', 'complete', 'submit', 'approve', 'reject', 'status', 'activate', 'deactivate', 'login', 'logout', 'upload_evidence', 'password_reset', 'backup'];
 
   return (

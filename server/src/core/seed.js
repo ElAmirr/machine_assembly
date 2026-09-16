@@ -107,22 +107,6 @@ export async function seedNow({ force = false, logger = console } = {}) {
   }
 
   // ---------------------------------------------------------------- inventory
-  const materialDefs = [
-    { name: 'Electrical Cable 2.5mm2', reference: 'MAT-CBL-25', unit: 'm', supplier: 'ElectroParts', location: 'Spare Parts Storage' },
-    { name: 'Screws M4x20', reference: 'MAT-SCR-M4', unit: 'pcs', supplier: 'FastFix', location: 'Spare Parts Storage' },
-    { name: 'Cable Ties', reference: 'MAT-TIE-200', unit: 'pcs', supplier: 'ElectroParts', location: 'Spare Parts Storage' },
-    { name: 'Cable Glands M16', reference: 'MAT-GLD-M16', unit: 'pcs', supplier: 'ElectroParts', location: 'Spare Parts Storage' },
-    { name: 'Heat Shrink Tube', reference: 'MAT-HST-10', unit: 'm', supplier: 'ElectroParts', location: 'Spare Parts Storage' },
-    { name: 'Thread Locking Compound', reference: 'MAT-TLC-01', unit: 'bottle', supplier: 'LoctitePro', location: 'Workshop A' },
-    { name: 'Lubricant Grease', reference: 'MAT-GRS-01', unit: 'kg', supplier: 'MachineOil', location: 'Workshop A' },
-    { name: 'Sensor Bracket', reference: 'MAT-BRK-SEN', unit: 'pcs', supplier: 'MechParts', location: 'Storage B' }
-  ];
-  const materials = {};
-  for (const def of materialDefs) {
-    const doc = await collections.materials.insert({ id: newId('mat'), description: '', status: 'active', ...def });
-    materials[def.name] = doc;
-  }
-
   const componentDefs = [
     { name: 'Proximity Sensor', reference: 'PS-001', partNumber: 'PS-001', manufacturer: 'Keyence', quantity: 25, supplier: 'AutomationPro', location: 'Storage B' },
     { name: 'PLC Module CPU1215C', reference: 'PLC-CPU1215', partNumber: '6ES7215-1AG40', manufacturer: 'Siemens', quantity: 6, supplier: 'AutomationPro', location: 'Storage B' },
@@ -164,7 +148,6 @@ export async function seedNow({ force = false, logger = console } = {}) {
     durationUnit: opts.unit || 'days',
     roleId: null,
     assignedUserId: null,
-    materials: opts.materials || [],
     components: opts.components || [],
     tools: opts.tools || [],
     evidenceRequired: opts.evidenceRequired ?? false,
@@ -176,7 +159,6 @@ export async function seedNow({ force = false, logger = console } = {}) {
     notes: ''
   });
   const req = {
-    material: (name, quantity, unit, notes = '') => ({ materialId: materials[name]?.id, quantity, unit: unit || materials[name]?.unit || '', notes }),
     component: (name, quantity, notes = '') => ({ componentId: components[name]?.id, quantity, notes }),
     tool: (name, notes = '') => ({ toolId: tools[name]?.id, quantity: 1, unit: '', notes })
   };
@@ -188,14 +170,12 @@ export async function seedNow({ force = false, logger = console } = {}) {
     }),
     step('Prepare required components', {
       description: 'Collect the sensors and accessories required for the Poka-Yoke installation.',
-      components: [req.component('Proximity Sensor', 2)],
-      materials: [req.material('Cable Ties', 20, 'pcs')]
+      components: [req.component('Proximity Sensor', 2)]
     }),
     step('Install sensors', {
       description: 'Install the sensor according to the technical drawing.',
       instructions: 'Adjust the sensor distance to 5 mm from the target. Use the bracket to lock the position.',
       components: [req.component('Proximity Sensor', 2), req.component('Sensor Bracket', 2)],
-      materials: [req.material('Screws M4x20', 8, 'pcs'), req.material('Cable Ties', 10, 'pcs')],
       tools: [req.tool('Digital Caliper'), req.tool('Drill')],
       evidenceRequired: true,
       evidenceTypes: ['photo'],
@@ -205,7 +185,6 @@ export async function seedNow({ force = false, logger = console } = {}) {
     }),
     step('Connect electrical system', {
       description: 'Wire the sensors and connect them to the machine control system.',
-      materials: [req.material('Electrical Cable 2.5mm2', 6, 'm'), req.material('Cable Glands M16', 2, 'pcs')],
       tools: [req.tool('Multimeter')],
       evidenceRequired: true,
       evidenceTypes: ['photo'],
@@ -234,12 +213,10 @@ export async function seedNow({ force = false, logger = console } = {}) {
   const pokaYokeShortSteps = [
     step('Read Poka-Yoke instruction', { description: 'Read the work instruction and understand the required sequence.' }),
     step('Prepare required components', {
-      components: [req.component('Proximity Sensor', 2)],
-      materials: [req.material('Cable Ties', 20, 'pcs')]
+      components: [req.component('Proximity Sensor', 2)]
     }),
     step('Install sensor and connect', {
       components: [req.component('Proximity Sensor', 2)],
-      materials: [req.material('Electrical Cable 2.5mm2', 5, 'm')],
       tools: [req.tool('Multimeter')],
       evidenceRequired: true,
       evidenceTypes: ['photo'],
@@ -282,7 +259,6 @@ export async function seedNow({ force = false, logger = console } = {}) {
       approvalRequired: extra.approvalRequired || false,
       sequentialSteps: extra.sequentialSteps !== false,
       dependsOn: [],
-      materials: extra.materials || [],
       components: extra.components || [],
       tools: extra.tools || [],
       notes: '',
@@ -315,12 +291,11 @@ export async function seedNow({ force = false, logger = console } = {}) {
     buildTask('Order Jigs and Table', 'Engineer', 5, 'days', {
       steps: [
         step('Send order to supplier', { tools: [req.tool('Laptop')] }),
-        step('Track delivery and reception', { materials: [req.material('Screws M4x20', 50, 'pcs')] })
+        step('Track delivery and reception'),
       ]
     }),
     buildTask('Electrical Cabinet', 'Electrical Technician', 4, 'days', {
       components: [req.component('PLC Module CPU1215C', 1), req.component('Contactor 24V', 2), req.component('Relay 24V DC', 4), req.component('Emergency Stop Switch', 1)],
-      materials: [req.material('Electrical Cable 2.5mm2', 25, 'm'), req.material('Cable Glands M16', 6, 'pcs')],
       tools: [req.tool('Multimeter'), req.tool('Laptop'), req.tool('PLC Programming Cable')],
       steps: [
         step('Prepare cabinet and components', {}),
@@ -334,7 +309,6 @@ export async function seedNow({ force = false, logger = console } = {}) {
       ]
     }),
     buildTask('Table and Jigs Assembly', 'Technician', 2, 'days', {
-      materials: [req.material('Screws M4x20', 30, 'pcs'), req.material('Thread Locking Compound', 1, 'bottle')],
       tools: [req.tool('Torque Wrench'), req.tool('Drill'), req.tool('Digital Caliper')],
       steps: [
         step('Mount table frame', {}),
@@ -349,7 +323,6 @@ export async function seedNow({ force = false, logger = console } = {}) {
       steps: pokaYokeFullSteps
     }),
     buildTask('Mechanical Adjustment', 'Mechanical Technician', 2, 'days', {
-      materials: [req.material('Lubricant Grease', 1, 'kg'), req.material('Thread Locking Compound', 1, 'bottle')],
       tools: [req.tool('Torque Wrench'), req.tool('Digital Caliper')],
       steps: [
         step('Adjust mechanics', { description: 'Adjust belts, rails and mechanical stops.' }),
@@ -380,7 +353,6 @@ export async function seedNow({ force = false, logger = console } = {}) {
     }),
     buildTask('Order Jigs and Table', 'Engineer', 5, 'days', { steps: [step('Send order to supplier'), step('Track delivery')] }),
     buildTask('Table and Jigs Assembly', 'Technician', 2, 'days', {
-      materials: [req.material('Screws M4x20', 30, 'pcs')],
       tools: [req.tool('Torque Wrench')],
       steps: [step('Mount table frame'), step('Install jigs'), step('Alignment check', {
         evidenceRequired: true, evidenceTypes: ['measurement'], minFiles: 0,

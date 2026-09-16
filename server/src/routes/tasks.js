@@ -257,7 +257,6 @@ tasksRouter.get('/tasks/:id', requirePermission('tasks.view'), asyncHandler(asyn
         roleIds: u.roleIds || []
       })),
       roles: lookups.roles.sort((a, b) => String(a.name).localeCompare(String(b.name))),
-      materials: lookups.materials,
       components: lookups.components,
       tools: lookups.tools,
       evidenceTypes: lookups.evidenceTypes,
